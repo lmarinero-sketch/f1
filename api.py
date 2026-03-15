@@ -24,6 +24,26 @@ app.add_middleware(
 
 analyzer = F1PerformanceAnalyzer(cache_dir="f1_cache")
 
+
+@app.get("/")
+def health_check():
+    """Health check / root endpoint."""
+    return {
+        "status": "online",
+        "service": "F1 Telemetry API",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "endpoints": [
+            "/api/schedule",
+            "/api/drivers",
+            "/api/analyze",
+            "/api/race-results",
+            "/api/news",
+            "/api/ai-analyze",
+        ]
+    }
+
+
 # ============================================================
 # MODELOS
 # ============================================================
