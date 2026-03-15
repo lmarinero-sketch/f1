@@ -103,7 +103,7 @@ function CountdownTimer({ targetDate, label }) {
 export default function SchedulePage() {
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [year, setYear] = useState(2025);
+    const [year, setYear] = useState(2026);
 
     const fetchSchedule = useCallback(async () => {
         setLoading(true);

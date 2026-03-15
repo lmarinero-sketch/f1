@@ -15,7 +15,7 @@ const TEAM_COLORS = {
 };
 
 export default function TeamsBattle() {
-    const [year, setYear] = useState(2025);
+    const [year, setYear] = useState(2026);
     const [events, setEvents] = useState([]);
     const [selectedRound, setSelectedRound] = useState(null);
     const [eventType, setEventType] = useState('R');

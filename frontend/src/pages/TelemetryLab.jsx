@@ -9,7 +9,7 @@ const Plot = createPlotlyComponent(Plotly);
 import { API_URL } from '../config';
 
 export default function TelemetryLab() {
-  const [year, setYear] = useState(2025);
+  const [year, setYear] = useState(2026);
   const [events, setEvents] = useState([]);
   const [selectedRound, setSelectedRound] = useState(null);
   const [eventType, setEventType] = useState("FP1");

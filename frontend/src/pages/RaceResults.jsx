@@ -18,7 +18,7 @@ const COMPOUND_SHORT = {
 };
 
 export default function RaceResults() {
-    const [year, setYear] = useState(2025);
+    const [year, setYear] = useState(2026);
     const [events, setEvents] = useState([]);
     const [selectedRound, setSelectedRound] = useState(null);
     const [sessionType, setSessionType] = useState('R');

@@ -9,7 +9,7 @@ import { API_URL } from '../config';
 const DRIVER_COLORS = ['#E53935', '#FF6F00', '#0277BD', '#2E7D32', '#7B1FA2', '#F57C00', '#C2185B', '#00838F', '#5E35B1', '#0097A7'];
 
 export default function SeasonTrends() {
-    const [year, setYear] = useState(2024);
+    const [year, setYear] = useState(2026);
     const [drivers, setDrivers] = useState(['VER', 'NOR', 'LEC']);
     const [newDriver, setNewDriver] = useState('');
     const [eventType, setEventType] = useState('R');

@@ -12,7 +12,7 @@ export default function CrossYear() {
     const [selectedTrack, setSelectedTrack] = useState('');
     const [driver, setDriver] = useState('VER');
     const [eventType, setEventType] = useState('R');
-    const [selectedYears, setSelectedYears] = useState([2023, 2024, 2025]);
+    const [selectedYears, setSelectedYears] = useState([2024, 2025, 2026]);
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState(null);
     const [error, setError] = useState(null);
