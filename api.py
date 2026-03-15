@@ -565,6 +565,136 @@ async def get_race_results(
         except Exception as ex:
             print(f"Tire stints error: {ex}")
 
+        # 5. Driver detail data (for expandable panel)
+        driver_details = {}
+        try:
+            for drv in laps_df['Driver'].unique():
+                drv_laps = laps_df[laps_df['Driver'] == drv].sort_values('LapNumber')
+                if len(drv_laps) == 0:
+                    continue
+
+                # Lap times array (for sparkline)
+                lap_times = []
+                for _, lap in drv_laps.iterrows():
+                    lt = lap.get('LapTime', None)
+                    try:
+                        if lt is not None and not pd.isna(lt):
+                            lap_times.append(round(lt.total_seconds(), 3))
+                        else:
+                            lap_times.append(None)
+                    except:
+                        lap_times.append(None)
+
+                # Best sector times
+                best_s1, best_s2, best_s3 = None, None, None
+                try:
+                    s1_vals = drv_laps['Sector1Time'].dropna()
+                    s2_vals = drv_laps['Sector2Time'].dropna()
+                    s3_vals = drv_laps['Sector3Time'].dropna()
+                    if len(s1_vals) > 0:
+                        best_s1 = round(s1_vals.min().total_seconds(), 3)
+                    if len(s2_vals) > 0:
+                        best_s2 = round(s2_vals.min().total_seconds(), 3)
+                    if len(s3_vals) > 0:
+                        best_s3 = round(s3_vals.min().total_seconds(), 3)
+                except:
+                    pass
+
+                # Speed trap (max speed)
+                max_speed = None
+                try:
+                    speed_col = None
+                    for col_name in ['SpeedST', 'SpeedFL', 'SpeedI1', 'SpeedI2']:
+                        if col_name in drv_laps.columns:
+                            speed_col = col_name
+                            break
+                    if speed_col:
+                        speed_vals = pd.to_numeric(drv_laps[speed_col], errors='coerce').dropna()
+                        if len(speed_vals) > 0:
+                            max_speed = round(float(speed_vals.max()), 1)
+                except:
+                    pass
+
+                # Per-driver pit stops
+                drv_pits = []
+                try:
+                    drv_pit_laps = drv_laps[drv_laps['PitInTime'].notna() | drv_laps['PitOutTime'].notna()]
+                    stop_n = 1
+                    for _, pit in drv_pit_laps.iterrows():
+                        pit_dur_val = pit.get('PitOutTime', None)
+                        pit_in_val = pit.get('PitInTime', None)
+                        dur_str = ''
+                        if pit_dur_val and pit_in_val and str(pit_dur_val) != 'NaT' and str(pit_in_val) != 'NaT':
+                            dur = (pit_dur_val - pit_in_val).total_seconds()
+                            if 0 < dur < 120:
+                                dur_str = f"{dur:.3f}"
+                        drv_pits.append({
+                            'stop': stop_n,
+                            'lap': int(pit['LapNumber']),
+                            'duration': dur_str,
+                            'compound': str(pit.get('Compound', '')),
+                        })
+                        stop_n += 1
+                except:
+                    pass
+
+                # Per-driver tire stints
+                drv_stints = []
+                try:
+                    current_c = None
+                    s_start = 0
+                    for _, lap in drv_laps.iterrows():
+                        c = str(lap.get('Compound', 'UNKNOWN'))
+                        if c != current_c:
+                            if current_c:
+                                drv_stints.append({
+                                    'compound': current_c,
+                                    'start_lap': s_start,
+                                    'end_lap': int(lap['LapNumber']) - 1,
+                                    'laps': int(lap['LapNumber']) - 1 - s_start,
+                                })
+                            current_c = c
+                            s_start = int(lap['LapNumber'])
+                    if current_c:
+                        drv_stints.append({
+                            'compound': current_c,
+                            'start_lap': s_start,
+                            'end_lap': int(drv_laps.iloc[-1]['LapNumber']),
+                            'laps': int(drv_laps.iloc[-1]['LapNumber']) - s_start + 1,
+                        })
+                except:
+                    pass
+
+                # Position per lap (for overtake calculation)
+                positions_per_lap = []
+                try:
+                    if 'Position' in drv_laps.columns:
+                        for _, lap in drv_laps.iterrows():
+                            pos_val = lap.get('Position', None)
+                            try:
+                                if pos_val is not None and not pd.isna(pos_val):
+                                    positions_per_lap.append(int(pos_val))
+                                else:
+                                    positions_per_lap.append(None)
+                            except:
+                                positions_per_lap.append(None)
+                except:
+                    pass
+
+                driver_details[drv] = {
+                    'lap_times': lap_times,
+                    'lap_numbers': [int(l['LapNumber']) for _, l in drv_laps.iterrows()],
+                    'best_sector1': best_s1,
+                    'best_sector2': best_s2,
+                    'best_sector3': best_s3,
+                    'max_speed': max_speed,
+                    'pit_stops': drv_pits,
+                    'tire_stints': drv_stints,
+                    'positions_per_lap': positions_per_lap,
+                }
+        except Exception as ex:
+            print(f"Driver details error: {ex}")
+
         return {
             'event_name': event_name,
             'circuit': circuit,
@@ -575,6 +705,7 @@ async def get_race_results(
             'fastest_laps': fastest_laps,
             'pit_stops': pit_stops,
             'tire_stints': tire_stints,
+            'driver_details': driver_details,
         }
 
     try:

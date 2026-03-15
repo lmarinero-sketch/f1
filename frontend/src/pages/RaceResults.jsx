@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Trophy, Calendar, Flag, Clock, Fuel, Circle, ChevronDown, ChevronUp, Activity, Zap, ArrowUp, ArrowDown, Minus } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Trophy, Calendar, Flag, Clock, Fuel, Circle, ChevronDown, ChevronUp, Activity, Zap, ArrowUp, ArrowDown, Minus, Gauge, Timer, GitBranch } from 'lucide-react';
 
 import { API_URL } from '../config';
 
@@ -17,6 +17,260 @@ const COMPOUND_SHORT = {
     'INTERMEDIATE': 'I', 'WET': 'W', 'UNKNOWN': '?',
 };
 
+// Mini sparkline component for lap times
+function LapSparkline({ lapTimes, color }) {
+    const validTimes = lapTimes.filter(t => t !== null && t > 0 && t < 300);
+    if (validTimes.length < 3) return <span className="text-[9px] text-text-muted font-mono">Sin datos</span>;
+
+    const min = Math.min(...validTimes);
+    const max = Math.max(...validTimes);
+    const range = max - min || 1;
+    const h = 40;
+    const w = 280;
+    const step = w / (lapTimes.length - 1);
+
+    let pathD = '';
+    let started = false;
+    lapTimes.forEach((t, i) => {
+        if (t === null || t <= 0 || t > 300) return;
+        const x = i * step;
+        const y = h - ((t - min) / range) * (h - 4) - 2;
+        if (!started) { pathD += `M${x},${y}`; started = true; }
+        else { pathD += ` L${x},${y}`; }
+    });
+
+    return (
+        <svg width={w} height={h} className="block">
+            <path d={pathD} fill="none" stroke={color || '#E53935'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            {/* Mark fastest lap */}
+            {(() => {
+                const fastestIdx = lapTimes.indexOf(min);
+                if (fastestIdx >= 0) {
+                    const x = fastestIdx * step;
+                    const y = h - 2;
+                    return <circle cx={x} cy={y} r="2.5" fill="#7B1FA2" />;
+                }
+                return null;
+            })()}
+        </svg>
+    );
+}
+
+// Compute overtakes from position array
+function computeOvertakes(positions) {
+    if (!positions || positions.length < 2) return { gained: 0, lost: 0, total: 0 };
+    let gained = 0, lost = 0;
+    for (let i = 1; i < positions.length; i++) {
+        if (positions[i] === null || positions[i - 1] === null) continue;
+        const diff = positions[i - 1] - positions[i]; // positive = overtook someone
+        if (diff > 0) gained += diff;
+        else if (diff < 0) lost += Math.abs(diff);
+    }
+    return { gained, lost, total: gained + lost };
+}
+
+// Expandable driver detail panel
+function DriverDetailPanel({ drv, detail, totalLaps }) {
+    if (!detail) return (
+        <div className="px-6 py-4 text-center text-text-muted text-xs font-mono">
+            Datos detallados no disponibles para este piloto
+        </div>
+    );
+
+    const overtakes = computeOvertakes(detail.positions_per_lap);
+    const avgLapTime = (() => {
+        const valid = (detail.lap_times || []).filter(t => t !== null && t > 0 && t < 300);
+        if (valid.length === 0) return null;
+        return (valid.reduce((a, b) => a + b, 0) / valid.length).toFixed(3);
+    })();
+
+    return (
+        <div className="px-4 pb-4 pt-2 bg-[#FAFAFA] border-t border-border-light animate-fadeIn">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+
+                {/* INFO GENERAL */}
+                <div className="bg-white rounded-xl border border-border-light p-3">
+                    <div className="text-[8px] uppercase tracking-[0.15em] text-text-muted font-bold mb-2 flex items-center gap-1">
+                        <Trophy size={10} className="text-accent-primary" /> Info General
+                    </div>
+                    <div className="space-y-1.5">
+                        <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-text-muted">Equipo</span>
+                            <div className="flex items-center gap-1.5">
+                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: drv.team_color }} />
+                                <span className="text-[10px] font-bold text-text-heading">{drv.team}</span>
+                            </div>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-[10px] text-text-muted">Número</span>
+                            <span className="text-[10px] font-mono font-bold text-text-heading">#{drv.number}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-[10px] text-text-muted">Grid → Finish</span>
+                            <span className="text-[10px] font-mono font-bold text-text-heading">
+                                P{drv.grid_position || '?'} → P{drv.position}
+                            </span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-[10px] text-text-muted">Posiciones</span>
+                            {drv.positions_gained > 0 ? (
+                                <span className="text-[10px] font-bold text-[#2E7D32] flex items-center gap-0.5">
+                                    <ArrowUp size={9} /> +{drv.positions_gained}
+                                </span>
+                            ) : drv.positions_gained < 0 ? (
+                                <span className="text-[10px] font-bold text-accent-red flex items-center gap-0.5">
+                                    <ArrowDown size={9} /> {drv.positions_gained}
+                                </span>
+                            ) : (
+                                <span className="text-[10px] font-mono text-text-muted">—</span>
+                            )}
+                        </div>
+                        {avgLapTime && (
+                            <div className="flex justify-between">
+                                <span className="text-[10px] text-text-muted">Tiempo Prom.</span>
+                                <span className="text-[10px] font-mono font-bold text-text-heading">{avgLapTime}s</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* TIEMPOS CLAVE */}
+                <div className="bg-white rounded-xl border border-border-light p-3">
+                    <div className="text-[8px] uppercase tracking-[0.15em] text-text-muted font-bold mb-2 flex items-center gap-1">
+                        <Timer size={10} className="text-[#7B1FA2]" /> Tiempos Clave
+                    </div>
+                    <div className="space-y-1.5">
+                        <div className="flex justify-between">
+                            <span className="text-[10px] text-text-muted">Fastest Lap</span>
+                            <span className="text-[10px] font-mono font-bold text-[#7B1FA2]">{drv.fastest_lap || '—'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-[10px] text-text-muted">Sector 1</span>
+                            <span className="text-[10px] font-mono font-bold text-text-heading">{detail.best_sector1 ? `${detail.best_sector1}s` : '—'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-[10px] text-text-muted">Sector 2</span>
+                            <span className="text-[10px] font-mono font-bold text-text-heading">{detail.best_sector2 ? `${detail.best_sector2}s` : '—'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-[10px] text-text-muted">Sector 3</span>
+                            <span className="text-[10px] font-mono font-bold text-text-heading">{detail.best_sector3 ? `${detail.best_sector3}s` : '—'}</span>
+                        </div>
+                        {detail.max_speed && (
+                            <div className="flex justify-between items-center pt-1 border-t border-border-light">
+                                <span className="text-[10px] text-text-muted flex items-center gap-1"><Gauge size={9} /> Speed Trap</span>
+                                <span className="text-[10px] font-mono font-black text-accent-primary">{detail.max_speed} km/h</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* PIT STOPS */}
+                <div className="bg-white rounded-xl border border-border-light p-3">
+                    <div className="text-[8px] uppercase tracking-[0.15em] text-text-muted font-bold mb-2 flex items-center gap-1">
+                        <Fuel size={10} className="text-[#0277BD]" /> Pit Stops ({detail.pit_stops?.length || 0})
+                    </div>
+                    {detail.pit_stops && detail.pit_stops.length > 0 ? (
+                        <div className="space-y-1.5">
+                            {detail.pit_stops.map(ps => (
+                                <div key={ps.stop} className="flex items-center justify-between py-0.5">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-[9px] font-mono text-text-muted w-3">#{ps.stop}</span>
+                                        <span className="text-[10px] font-mono text-text-heading">Lap {ps.lap}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {ps.compound && (
+                                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[8px] font-bold"
+                                                style={{
+                                                    color: COMPOUND_COLORS[ps.compound] || '#999',
+                                                    backgroundColor: `${COMPOUND_COLORS[ps.compound] || '#999'}15`,
+                                                }}>
+                                                <Circle size={5} fill={COMPOUND_COLORS[ps.compound] || '#999'} stroke="none" />
+                                                {COMPOUND_SHORT[ps.compound] || '?'}
+                                            </span>
+                                        )}
+                                        {ps.duration && (
+                                            <span className="text-[10px] font-mono font-bold text-[#0277BD]">{ps.duration}s</span>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-[10px] text-text-muted font-mono py-2">Sin paradas registradas</div>
+                    )}
+                </div>
+
+                {/* ADELANTAMIENTOS */}
+                <div className="bg-white rounded-xl border border-border-light p-3">
+                    <div className="text-[8px] uppercase tracking-[0.15em] text-text-muted font-bold mb-2 flex items-center gap-1">
+                        <GitBranch size={10} className="text-[#FF6F00]" /> Adelantamientos
+                    </div>
+                    <div className="space-y-1.5">
+                        <div className="flex justify-between">
+                            <span className="text-[10px] text-text-muted">Posiciones ganadas</span>
+                            <span className="text-[10px] font-mono font-bold text-[#2E7D32]">{overtakes.gained > 0 ? `+${overtakes.gained}` : '0'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-[10px] text-text-muted">Posiciones perdidas</span>
+                            <span className="text-[10px] font-mono font-bold text-accent-red">{overtakes.lost > 0 ? `-${overtakes.lost}` : '0'}</span>
+                        </div>
+                        <div className="flex justify-between pt-1 border-t border-border-light">
+                            <span className="text-[10px] text-text-muted font-bold">Cambios totales</span>
+                            <span className="text-[10px] font-mono font-black text-[#FF6F00]">{overtakes.total}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* TIRE STRATEGY BAR */}
+            {detail.tire_stints && detail.tire_stints.length > 0 && (
+                <div className="bg-white rounded-xl border border-border-light p-3 mb-3">
+                    <div className="text-[8px] uppercase tracking-[0.15em] text-text-muted font-bold mb-2 flex items-center gap-1">
+                        <Flag size={10} className="text-accent-primary" /> Estrategia de Neumáticos
+                    </div>
+                    <div className="flex items-center h-8 relative rounded-md overflow-hidden bg-gray-50">
+                        {detail.tire_stints.map((stint, idx) => {
+                            const total = totalLaps || 57;
+                            const widthPct = (stint.laps / total) * 100;
+                            const leftPct = ((stint.start_lap - 1) / total) * 100;
+                            const color = COMPOUND_COLORS[stint.compound] || '#999';
+                            return (
+                                <div key={idx}
+                                    className="absolute h-full flex items-center justify-center"
+                                    style={{
+                                        left: `${leftPct}%`, width: `${widthPct}%`,
+                                        backgroundColor: `${color}25`,
+                                        borderLeft: `2px solid ${color}`,
+                                        borderRight: idx === detail.tire_stints.length - 1 ? `2px solid ${color}` : 'none',
+                                    }}
+                                    title={`${stint.compound}: L${stint.start_lap}-L${stint.end_lap} (${stint.laps} vtas)`}>
+                                    <span className="text-[9px] font-mono font-bold" style={{ color }}>
+                                        {stint.laps > 3 ? `${COMPOUND_SHORT[stint.compound] || '?'} ${stint.laps}v` : COMPOUND_SHORT[stint.compound] || '?'}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* LAP-BY-LAP SPARKLINE */}
+            {detail.lap_times && detail.lap_times.filter(t => t !== null).length > 3 && (
+                <div className="bg-white rounded-xl border border-border-light p-3">
+                    <div className="text-[8px] uppercase tracking-[0.15em] text-text-muted font-bold mb-2 flex items-center gap-1">
+                        <Activity size={10} className="text-accent-primary" /> Tiempos por Vuelta
+                        <span className="ml-auto text-[8px] font-mono text-text-muted">
+                            Más abajo = más rápido · <span className="text-[#7B1FA2]">●</span> = vuelta más rápida
+                        </span>
+                    </div>
+                    <LapSparkline lapTimes={detail.lap_times} color={drv.team_color} />
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function RaceResults() {
     const [year, setYear] = useState(2026);
     const [events, setEvents] = useState([]);
@@ -28,6 +282,7 @@ export default function RaceResults() {
     const [activeTab, setActiveTab] = useState('race');
     const [error, setError] = useState(null);
     const [showEvents, setShowEvents] = useState(true);
+    const [expandedDriver, setExpandedDriver] = useState(null);
 
     useEffect(() => { fetchSchedule(year); }, [year]);
 
@@ -45,7 +300,7 @@ export default function RaceResults() {
 
     const fetchResults = async () => {
         if (!selectedRound) return;
-        setLoading(true); setError(null);
+        setLoading(true); setError(null); setExpandedDriver(null);
         try {
             const res = await fetch(`${API_URL}/api/race-results?year=${year}&track=${selectedRound}&event_type=${sessionType}`);
             if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Error'); }
@@ -53,6 +308,10 @@ export default function RaceResults() {
             setShowEvents(false);
         } catch (err) { setError(err.message); }
         finally { setLoading(false); }
+    };
+
+    const toggleDriver = (abbr) => {
+        setExpandedDriver(prev => prev === abbr ? null : abbr);
     };
 
     const selectedEvent = events.find(e => e.round_number === selectedRound);
@@ -138,7 +397,7 @@ export default function RaceResults() {
             {data && (
                 <div className="flex gap-1 mb-4 border-b border-border-light">
                     {tabs.map(tab => (
-                        <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                        <button key={tab.id} onClick={() => { setActiveTab(tab.id); setExpandedDriver(null); }}
                             className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all duration-200 border-b-2 -mb-[1px]
                 ${activeTab === tab.id
                                     ? 'text-accent-primary border-accent-primary'
@@ -166,6 +425,7 @@ export default function RaceResults() {
                             <span className="text-sm font-black text-text-heading">{data.event_name}</span>
                             <span className="text-[10px] font-mono text-text-muted ml-2">{data.total_laps} vueltas</span>
                         </div>
+                        <span className="text-[9px] text-text-muted font-mono">Hacé click en un piloto para ver detalles</span>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full">
@@ -180,6 +440,7 @@ export default function RaceResults() {
                                     <th className="px-3 py-2.5 text-center">±</th>
                                     <th className="px-3 py-2.5 text-right">FL</th>
                                     <th className="px-3 py-2.5 text-center w-16">PTS</th>
+                                    <th className="px-3 py-2.5 text-center w-8"></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -187,52 +448,69 @@ export default function RaceResults() {
                                     const isWinner = idx === 0;
                                     const isDNF = drv.position === 'DNF' || drv.status?.includes('Retired');
                                     const gained = drv.positions_gained;
+                                    const isExpanded = expandedDriver === drv.abbreviation;
+                                    const detail = data.driver_details?.[drv.abbreviation];
+
                                     return (
-                                        <tr key={drv.abbreviation}
-                                            className={`border-b border-border-light/70 transition-all duration-200 hover:bg-[#FAFAFA] group
-                        ${isWinner ? 'bg-red-50/50' : ''} ${isDNF ? 'opacity-50' : ''}`}>
-                                            <td className="px-3 py-3 text-center">
-                                                <span className={`font-mono font-black text-base ${isWinner ? 'text-accent-primary' : isDNF ? 'text-accent-red text-xs' : 'text-text-heading'}`}>
-                                                    {drv.position}
-                                                </span>
-                                            </td>
-                                            <td className="px-3 py-3">
-                                                <div className="flex items-center gap-2.5">
-                                                    <div className="w-1 h-8 rounded-full" style={{ backgroundColor: drv.team_color }} />
-                                                    <div>
-                                                        <div className="text-sm font-bold text-text-heading group-hover:text-accent-primary transition-colors">{drv.full_name}</div>
-                                                        <div className="text-[10px] text-text-muted">{drv.team}</div>
+                                        <React.Fragment key={drv.abbreviation}>
+                                            <tr onClick={() => toggleDriver(drv.abbreviation)}
+                                                className={`border-b border-border-light/70 transition-all duration-200 cursor-pointer select-none
+                                                    ${isExpanded ? 'bg-red-50/70 !border-accent-primary/30' : 'hover:bg-[#FAFAFA]'}
+                                                    ${isWinner && !isExpanded ? 'bg-red-50/50' : ''} ${isDNF ? 'opacity-50' : ''}`}>
+                                                <td className="px-3 py-3 text-center">
+                                                    <span className={`font-mono font-black text-base ${isWinner ? 'text-accent-primary' : isDNF ? 'text-accent-red text-xs' : 'text-text-heading'}`}>
+                                                        {drv.position}
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-3">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <div className="w-1 h-8 rounded-full" style={{ backgroundColor: drv.team_color }} />
+                                                        <div>
+                                                            <div className={`text-sm font-bold transition-colors ${isExpanded ? 'text-accent-primary' : 'text-text-heading'}`}>{drv.full_name}</div>
+                                                            <div className="text-[10px] text-text-muted">{drv.team}</div>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-3 py-3 text-center font-mono text-xs text-text-muted">{drv.number}</td>
-                                            <td className="px-3 py-3 text-center font-mono text-xs text-text-heading">{drv.laps}</td>
-                                            <td className="px-3 py-3 text-right">
-                                                <span className={`font-mono text-sm font-bold ${isWinner ? 'text-text-heading' : 'text-[#0277BD]'}`}>
-                                                    {drv.time}
-                                                </span>
-                                            </td>
-                                            <td className="px-3 py-3 text-center font-mono text-xs text-text-muted">{drv.grid_position || '-'}</td>
-                                            <td className="px-3 py-3 text-center">
-                                                {gained > 0 ? (
-                                                    <span className="flex items-center justify-center gap-0.5 text-[#2E7D32] font-mono text-xs font-bold">
-                                                        <ArrowUp size={10} /> {gained}
+                                                </td>
+                                                <td className="px-3 py-3 text-center font-mono text-xs text-text-muted">{drv.number}</td>
+                                                <td className="px-3 py-3 text-center font-mono text-xs text-text-heading">{drv.laps}</td>
+                                                <td className="px-3 py-3 text-right">
+                                                    <span className={`font-mono text-sm font-bold ${isWinner ? 'text-text-heading' : 'text-[#0277BD]'}`}>
+                                                        {drv.time}
                                                     </span>
-                                                ) : gained < 0 ? (
-                                                    <span className="flex items-center justify-center gap-0.5 text-accent-red font-mono text-xs font-bold">
-                                                        <ArrowDown size={10} /> {Math.abs(gained)}
-                                                    </span>
-                                                ) : (
-                                                    <Minus size={10} className="text-text-muted mx-auto" />
-                                                )}
-                                            </td>
-                                            <td className="px-3 py-3 text-right font-mono text-[11px] text-text-muted">{drv.fastest_lap}</td>
-                                            <td className="px-3 py-3 text-center">
-                                                {drv.points > 0 && (
-                                                    <span className="font-mono font-bold text-sm text-accent-primary">{drv.points}</span>
-                                                )}
-                                            </td>
-                                        </tr>
+                                                </td>
+                                                <td className="px-3 py-3 text-center font-mono text-xs text-text-muted">{drv.grid_position || '-'}</td>
+                                                <td className="px-3 py-3 text-center">
+                                                    {gained > 0 ? (
+                                                        <span className="flex items-center justify-center gap-0.5 text-[#2E7D32] font-mono text-xs font-bold">
+                                                            <ArrowUp size={10} /> {gained}
+                                                        </span>
+                                                    ) : gained < 0 ? (
+                                                        <span className="flex items-center justify-center gap-0.5 text-accent-red font-mono text-xs font-bold">
+                                                            <ArrowDown size={10} /> {Math.abs(gained)}
+                                                        </span>
+                                                    ) : (
+                                                        <Minus size={10} className="text-text-muted mx-auto" />
+                                                    )}
+                                                </td>
+                                                <td className="px-3 py-3 text-right font-mono text-[11px] text-text-muted">{drv.fastest_lap}</td>
+                                                <td className="px-3 py-3 text-center">
+                                                    {drv.points > 0 && (
+                                                        <span className="font-mono font-bold text-sm text-accent-primary">{drv.points}</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-3 py-3 text-center">
+                                                    <ChevronDown size={14}
+                                                        className={`text-text-muted transition-transform duration-200 ${isExpanded ? 'rotate-180 text-accent-primary' : ''}`} />
+                                                </td>
+                                            </tr>
+                                            {isExpanded && (
+                                                <tr>
+                                                    <td colSpan={10} className="p-0">
+                                                        <DriverDetailPanel drv={drv} detail={detail} totalLaps={data.total_laps} />
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
                                     );
                                 })}
                             </tbody>

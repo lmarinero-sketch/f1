@@ -45,6 +45,15 @@ export default {
         'glow-primary': '0 0 0 3px rgba(229, 57, 53, 0.15)',
         'glow-primary-hover': '0 0 0 4px rgba(229, 57, 53, 0.25)',
       },
+      animation: {
+        fadeIn: 'fadeIn 0.25s ease-out',
+      },
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0', transform: 'translateY(-4px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+      },
     },
   },
   plugins: [],
