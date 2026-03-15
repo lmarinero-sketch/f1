@@ -393,6 +393,17 @@ export default function RaceResults() {
                 </div>
             )}
 
+            {/* UNOFFICIAL RESULTS WARNING */}
+            {data && data.results_official === false && (
+                <div className="mb-4 p-3 rounded-lg border border-[#FF8F00] bg-[#FFF8E1] text-text-heading text-xs flex items-center gap-2">
+                    <span className="text-lg">⚠️</span>
+                    <div>
+                        <span className="font-bold text-[#E65100]">Resultados provisorios</span>
+                        <span className="text-text-body"> — La clasificación oficial aún no está disponible. Las posiciones se infieren del tiempo de vuelta más rápida y pueden no coincidir con el resultado real de la carrera.</span>
+                    </div>
+                </div>
+            )}
+
             {/* TABS */}
             {data && (
                 <div className="flex gap-1 mb-4 border-b border-border-light">

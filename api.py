@@ -447,14 +447,27 @@ async def get_race_results(
                 except Exception as ex:
                     print(f"Result row error: {ex}")
 
-            # If all positions are None (no official classification yet), infer from fastest lap times
+            # If all positions are None (no official classification yet), infer from laps + fastest lap
             has_positions = any(c['position'] is not None and c['position'] != 'DNF' for c in classification)
+            has_times = any(c['time'] for c in classification)
             if not has_positions and len(classification) > 0:
-                # Sort by laps completed (desc) then fastest lap time (asc)
+                # Sort by laps completed (desc) then fastest lap time as number (asc)
+                def _parse_fl(fl_str):
+                    """Convert fastest lap string like '1:35.275' to seconds for proper sorting."""
+                    if not fl_str:
+                        return 9999.0
+                    try:
+                        parts = fl_str.split(':')
+                        if len(parts) == 2:
+                            return float(parts[0]) * 60 + float(parts[1])
+                        return float(fl_str)
+                    except:
+                        return 9999.0
+
                 def _sort_key(c):
                     laps = c.get('laps', 0)
-                    fl = c.get('fastest_lap', '')
-                    return (-laps, fl if fl else 'z')
+                    fl_seconds = _parse_fl(c.get('fastest_lap', ''))
+                    return (-laps, fl_seconds)
                 classification.sort(key=_sort_key)
                 for i, c in enumerate(classification):
                     if c['laps'] > 0:
@@ -701,6 +714,7 @@ async def get_race_results(
             'year': year,
             'session_type': event_type,
             'total_laps': total_laps,
+            'results_official': has_positions,
             'classification': classification,
             'fastest_laps': fastest_laps,
             'pit_stops': pit_stops,
