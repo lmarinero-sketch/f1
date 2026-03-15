@@ -1294,16 +1294,28 @@ async def get_f1_news(
         "source_stats": source_stats
     }
 
-# ============================================================
-# TWEETS VIA NITTER RSS (FREE, NO API KEY)
+# TWEETS VIA RSS (FREE, NO API KEY) — with caching
 # ============================================================
 import re
 from html import unescape
+import time as _time
+
+# In-memory tweet cache: { handle: { "tweets": [...], "ts": timestamp } }
+_tweet_cache: dict = {}
+_TWEET_CACHE_TTL = 900  # 15 minutes
 
 NITTER_INSTANCES = [
     "https://nitter.poast.org",
     "https://nitter.privacydev.net",
     "https://nitter.woodland.cafe",
+    "https://nitter.net",
+    "https://nitter.cz",
+    "https://nitter.1d4.us",
+]
+
+RSSHUB_INSTANCES = [
+    "https://rsshub.app",
+    "https://rsshub.rssforever.com",
 ]
 
 def clean_tweet_html(html_text):
@@ -1316,44 +1328,79 @@ def clean_tweet_html(html_text):
 
 @app.get("/api/tweets")
 async def get_tweets(handle: str = Query("F1"), limit: int = Query(10)):
-    """Fetch recent tweets from a user via Nitter RSS (free)."""
+    """Fetch recent tweets via Nitter/RSSHub RSS with 15-min cache."""
     import feedparser
+
+    # Check cache first
+    cached = _tweet_cache.get(handle)
+    if cached and (_time.time() - cached["ts"]) < _TWEET_CACHE_TTL:
+        return {
+            "handle": handle,
+            "tweets": cached["tweets"][:limit],
+            "count": len(cached["tweets"][:limit]),
+            "source": "cache",
+            "cached": True
+        }
 
     tweets = []
 
+    # Try Nitter instances
     for instance in NITTER_INSTANCES:
         try:
             rss_url = f"{instance}/{handle}/rss"
             feed = feedparser.parse(rss_url)
-
             if not feed.entries:
                 continue
-
             for entry in feed.entries[:limit]:
                 text = clean_tweet_html(entry.get('description', ''))
                 link = entry.get('link', '')
                 if 'nitter' in link:
                     link = re.sub(r'https?://[^/]+', 'https://x.com', link)
-
-                published = entry.get('published', '')
                 tweets.append({
                     "text": text[:500],
-                    "date": published,
+                    "date": entry.get('published', ''),
                     "link": link,
                     "handle": handle,
                     "author": entry.get('author', f'@{handle}'),
                 })
-
             if tweets:
                 break
         except Exception:
             continue
 
+    # Fallback: try RSSHub
+    if not tweets:
+        for rss_instance in RSSHUB_INSTANCES:
+            try:
+                rss_url = f"{rss_instance}/twitter/user/{handle}"
+                feed = feedparser.parse(rss_url)
+                if not feed.entries:
+                    continue
+                for entry in feed.entries[:limit]:
+                    text = clean_tweet_html(entry.get('description', '') or entry.get('summary', ''))
+                    link = entry.get('link', '')
+                    tweets.append({
+                        "text": text[:500],
+                        "date": entry.get('published', ''),
+                        "link": link,
+                        "handle": handle,
+                        "author": f'@{handle}',
+                    })
+                if tweets:
+                    break
+            except Exception:
+                continue
+
+    # Update cache if we got tweets
+    if tweets:
+        _tweet_cache[handle] = {"tweets": tweets, "ts": _time.time()}
+
     return {
         "handle": handle,
         "tweets": tweets[:limit],
         "count": len(tweets),
-        "source": "nitter_rss"
+        "source": "rss",
+        "cached": False
     }
 
 
