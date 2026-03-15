@@ -230,7 +230,7 @@ export default function SchedulePage() {
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                         {upcomingEvents.map(event => {
-                            const isSuspended = SUSPENDED_EVENTS.some(s => event.event_name.includes(s) || s.includes(event.event_name));
+                            const isSuspended = year === 2026 && SUSPENDED_EVENTS.some(s => event.event_name.includes(s) || s.includes(event.event_name));
                             return (
                             <div key={event.round_number}
                                 className={`glass-card !p-4 group transition-all relative overflow-hidden ${isSuspended ? 'opacity-60 grayscale' : 'hover:shadow-md'}`}>
@@ -286,7 +286,7 @@ export default function SchedulePage() {
                     </h2>
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
                         {pastEvents.map(event => {
-                            const isSuspended = SUSPENDED_EVENTS.some(s => event.event_name.includes(s) || s.includes(event.event_name));
+                            const isSuspended = year === 2026 && SUSPENDED_EVENTS.some(s => event.event_name.includes(s) || s.includes(event.event_name));
                             return (
                             <div key={event.round_number}
                                 className={`glass-card !p-3 transition-opacity relative overflow-hidden ${isSuspended ? 'opacity-50 grayscale' : 'opacity-60 hover:opacity-100'}`}>

@@ -1,7 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { ExternalLink, Star, Search, Hash, TrendingUp, MessageCircle, Users, RefreshCw, Clock } from 'lucide-react';
-
-import { API_URL } from '../config';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { ExternalLink, Star, Search, Hash, TrendingUp, Users, RefreshCw } from 'lucide-react';
 
 const XIcon = ({ size = 16, className = '' }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
@@ -48,42 +46,92 @@ const TRENDING_TOPICS = [
     { tag: '#Alonso', desc: 'Fernando' },
 ];
 
-function timeAgo(dateStr) {
-    if (!dateStr) return '';
-    const now = new Date();
-    const d = new Date(dateStr);
-    const diffMs = now - d;
-    const mins = Math.floor(diffMs / 60000);
-    if (mins < 60) return `${mins}m`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h`;
-    const days = Math.floor(hrs / 24);
-    return `${days}d`;
-}
+// Component that renders an embedded Twitter timeline
+function TwitterTimeline({ handle, accountColor }) {
+    const containerRef = useRef(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
 
-function TweetCard({ tweet, accountColor }) {
+    useEffect(() => {
+        setLoading(true);
+        setError(false);
+
+        // Clear previous embed
+        if (containerRef.current) {
+            containerRef.current.innerHTML = '';
+        }
+
+        // Create the Twitter timeline anchor
+        const anchor = document.createElement('a');
+        anchor.className = 'twitter-timeline';
+        anchor.setAttribute('data-theme', 'dark');
+        anchor.setAttribute('data-chrome', 'noheader nofooter noborders transparent');
+        anchor.setAttribute('data-tweet-limit', '5');
+        anchor.setAttribute('data-width', '100%');
+        anchor.href = `https://twitter.com/${handle}`;
+        anchor.textContent = `Cargando tweets de @${handle}...`;
+
+        if (containerRef.current) {
+            containerRef.current.appendChild(anchor);
+        }
+
+        // Ask Twitter's widget.js to render it
+        const renderTimeline = () => {
+            if (window.twttr && window.twttr.widgets) {
+                window.twttr.widgets.load(containerRef.current).then(() => {
+                    setLoading(false);
+                    // Check if iframe was actually created
+                    setTimeout(() => {
+                        if (containerRef.current && !containerRef.current.querySelector('iframe')) {
+                            setError(true);
+                        }
+                    }, 3000);
+                });
+            } else {
+                // widgets.js not loaded yet, retry
+                setTimeout(renderTimeline, 500);
+            }
+        };
+
+        const timer = setTimeout(renderTimeline, 100);
+        // Timeout fallback
+        const fallbackTimer = setTimeout(() => {
+            if (loading) {
+                setLoading(false);
+                setError(true);
+            }
+        }, 10000);
+
+        return () => {
+            clearTimeout(timer);
+            clearTimeout(fallbackTimer);
+        };
+    }, [handle]);
+
     return (
-        <a href={tweet.link} target="_blank" rel="noopener noreferrer"
-            className="glass-card !p-4 group cursor-pointer hover:shadow-md transition-all block">
-            <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
-                    style={{ backgroundColor: accountColor + '12', border: `2px solid ${accountColor}30` }}>
-                    <XIcon size={14} style={{ color: accountColor }} />
+        <div className="relative">
+            {loading && (
+                <div className="flex flex-col items-center gap-3 py-16">
+                    <RefreshCw className="animate-spin text-[#1D9BF0]" size={32} />
+                    <span className="text-xs font-mono text-text-muted">Cargando timeline de @{handle}...</span>
                 </div>
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-bold text-text-heading">@{tweet.handle}</span>
-                        <span className="text-[10px] text-text-muted flex items-center gap-1">
-                            <Clock size={9} /> {timeAgo(tweet.date)}
-                        </span>
-                        <ExternalLink size={9} className="text-text-muted ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                    <p className="text-[12px] text-text-body leading-relaxed whitespace-pre-line line-clamp-4">
-                        {tweet.text}
-                    </p>
+            )}
+            <div ref={containerRef}
+                className="twitter-embed-container"
+                style={{ minHeight: loading ? 0 : 200, overflow: 'hidden' }}
+            />
+            {error && !loading && (
+                <div className="text-center py-8">
+                    <XIcon size={32} className="text-border-light mx-auto mb-3" />
+                    <p className="text-sm font-bold text-text-heading mb-1">Timeline no disponible</p>
+                    <p className="text-xs text-text-muted mb-4">Podés ver los tweets directamente en X.</p>
+                    <a href={`https://x.com/${handle}`} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-black text-white rounded-lg text-xs font-bold hover:bg-gray-800 transition-colors">
+                        <XIcon size={12} className="text-white" /> Abrir @{handle} en X <ExternalLink size={10} />
+                    </a>
                 </div>
-            </div>
-        </a>
+            )}
+        </div>
     );
 }
 
@@ -91,30 +139,6 @@ export default function TwitterHub() {
     const [categoryFilter, setCategoryFilter] = useState('Todos');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedAccount, setSelectedAccount] = useState(F1_ACCOUNTS[0]);
-    const [tweets, setTweets] = useState([]);
-    const [loadingTweets, setLoadingTweets] = useState(false);
-    const [tweetsError, setTweetsError] = useState(false);
-
-    const fetchTweets = useCallback(async (handle) => {
-        setLoadingTweets(true);
-        setTweetsError(false);
-        try {
-            const res = await fetch(`${API_URL}/api/tweets?handle=${handle}&limit=8`);
-            if (!res.ok) throw new Error('failed');
-            const data = await res.json();
-            setTweets(data.tweets || []);
-            if (data.tweets.length === 0) setTweetsError(true);
-        } catch {
-            setTweetsError(true);
-            setTweets([]);
-        } finally {
-            setLoadingTweets(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchTweets(selectedAccount.handle);
-    }, [selectedAccount, fetchTweets]);
 
     const filteredAccounts = F1_ACCOUNTS.filter(acc => {
         const matchCategory = categoryFilter === 'Todos' || acc.category === categoryFilter;
@@ -207,7 +231,7 @@ export default function TwitterHub() {
                     </div>
                 </div>
 
-                {/* RIGHT — Tweet Preview */}
+                {/* RIGHT — Tweet Embed */}
                 <div className="lg:col-span-8 xl:col-span-9">
                     {/* Selected Account Header */}
                     <div className="glass-card !p-4 mb-4">
@@ -229,75 +253,24 @@ export default function TwitterHub() {
                                     <span className="text-[11px] text-text-muted font-mono">@{selectedAccount.handle} · {selectedAccount.desc}</span>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <button onClick={() => fetchTweets(selectedAccount.handle)}
-                                    className="flex items-center gap-1 px-2.5 py-1.5 border border-border-light text-text-muted rounded-lg text-[10px] font-bold hover:border-border-medium transition-all">
-                                    <RefreshCw size={11} className={loadingTweets ? 'animate-spin' : ''} /> Recargar
-                                </button>
-                                <a href={`https://x.com/${selectedAccount.handle}`} target="_blank" rel="noopener noreferrer"
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-black text-white rounded-lg text-[10px] font-bold hover:bg-gray-800 transition-colors">
-                                    <XIcon size={12} className="text-white" /> Abrir en X <ExternalLink size={9} />
-                                </a>
-                            </div>
+                            <a href={`https://x.com/${selectedAccount.handle}`} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-black text-white rounded-lg text-[10px] font-bold hover:bg-gray-800 transition-colors">
+                                <XIcon size={12} className="text-white" /> Abrir en X <ExternalLink size={9} />
+                            </a>
                         </div>
                     </div>
 
-                    {/* Tweet Feed */}
-                    {loadingTweets && (
-                        <div className="flex flex-col items-center gap-3 py-16">
-                            <RefreshCw className="animate-spin text-[#1D9BF0]" size={32} />
-                            <span className="text-xs font-mono text-text-muted">Cargando tweets de @{selectedAccount.handle}...</span>
-                        </div>
-                    )}
-
-                    {!loadingTweets && tweets.length > 0 && (
-                        <div className="space-y-2">
-                            {tweets.map((tweet, i) => (
-                                <TweetCard key={i} tweet={tweet} accountColor={selectedAccount.color} />
-                            ))}
-                            <div className="flex justify-center pt-2">
-                                <a href={`https://x.com/${selectedAccount.handle}`} target="_blank" rel="noopener noreferrer"
-                                    className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg text-xs font-bold hover:bg-gray-800 transition-colors">
-                                    <XIcon size={14} className="text-white" /> Ver más en X <ExternalLink size={10} />
-                                </a>
-                            </div>
-                        </div>
-                    )}
-
-                    {!loadingTweets && tweetsError && (
-                        <div className="glass-card !p-6">
-                            <div className="text-center mb-4">
-                                <XIcon size={40} className="text-border-light mx-auto mb-3" />
-                                <p className="text-sm font-bold text-text-heading mb-1">No se pudieron cargar los tweets</p>
-                                <p className="text-xs text-text-muted mb-4">Los servidores RSS están temporalmente inaccesibles. Podés ver los tweets directamente en X.</p>
-                            </div>
-
-                            {/* Fallback: Direct links */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                <a href={`https://x.com/${selectedAccount.handle}`} target="_blank" rel="noopener noreferrer"
-                                    className="flex items-center gap-3 px-4 py-3 rounded-lg border border-border-light hover:border-[#1D9BF0] hover:bg-[#1D9BF0]/5 transition-all group">
-                                    <XIcon size={16} style={{ color: selectedAccount.color }} />
-                                    <div>
-                                        <span className="text-xs font-bold text-text-heading group-hover:text-[#1D9BF0]">Ver perfil de @{selectedAccount.handle}</span>
-                                        <div className="text-[9px] text-text-muted">Últimos tweets y respuestas</div>
-                                    </div>
-                                    <ExternalLink size={10} className="text-text-muted ml-auto" />
-                                </a>
-                                <a href={`https://x.com/search?q=from%3A${selectedAccount.handle}&f=live`} target="_blank" rel="noopener noreferrer"
-                                    className="flex items-center gap-3 px-4 py-3 rounded-lg border border-border-light hover:border-[#1D9BF0] hover:bg-[#1D9BF0]/5 transition-all group">
-                                    <Search size={16} className="text-[#1D9BF0]" />
-                                    <div>
-                                        <span className="text-xs font-bold text-text-heading group-hover:text-[#1D9BF0]">Buscar tweets</span>
-                                        <div className="text-[9px] text-text-muted">Tweets recientes de esta cuenta</div>
-                                    </div>
-                                    <ExternalLink size={10} className="text-text-muted ml-auto" />
-                                </a>
-                            </div>
-                        </div>
-                    )}
+                    {/* Twitter Timeline Embed */}
+                    <div className="glass-card !p-4">
+                        <TwitterTimeline
+                            key={selectedAccount.handle}
+                            handle={selectedAccount.handle}
+                            accountColor={selectedAccount.color}
+                        />
+                    </div>
 
                     {/* Quick Search Shortcuts */}
-                    <div className="mt-6 glass-card !p-4">
+                    <div className="mt-5 glass-card !p-4">
                         <div className="text-[10px] uppercase tracking-widest text-text-muted font-semibold mb-2">Búsquedas rápidas en X</div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5">
                             {[
