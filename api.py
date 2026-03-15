@@ -224,13 +224,10 @@ def analyze_telemetry(
             raise
 
         fig_telemetry = analyzer.plot_telemetry_multi(comp_data, show=False)
-        bg_t = dict(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-        fig_telemetry.update_layout(**bg_t)
 
         map_driver = track_map_driver or driver_list[0]
         map_lap_mode = lap_mode if lap_mode in ("fastest", "specific") else "fastest"
         fig_map = analyzer.plot_track_map(map_driver, lap_mode=map_lap_mode, lap_number=lap_number, show=False)
-        fig_map.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
 
         # Extraer lap times y stats
         lap_times = {}
@@ -643,12 +640,24 @@ async def cross_year_compare(
 
         fig.update_layout(
             template="plotly_dark", height=800, hovermode="x unified",
-            title=dict(text=f"Cross-Year: {driver} @ {track}", font=dict(color="#FFFFFF", size=14)),
-            font=dict(family="JetBrains Mono, monospace", color="#FFFFFF", size=11),
+            title=dict(text=f"Cross-Year: {driver} @ {track}", font=dict(color="#E5E7EB", size=14)),
+            font=dict(family="JetBrains Mono, monospace", color="#E5E7EB", size=11),
             hoverlabel=dict(bgcolor="rgba(0,0,0,0.92)", font_size=12, font_color="#FFFFFF", font_family="JetBrains Mono", bordercolor="rgba(255,255,255,0.15)"),
-            legend=dict(bgcolor="rgba(0,0,0,0.5)", bordercolor="rgba(255,255,255,0.1)", font=dict(color="#FFFFFF"), orientation="h", yanchor="bottom", y=1.02, x=0),
+            legend=dict(bgcolor="rgba(10,10,10,0.8)", bordercolor="rgba(255,255,255,0.1)", font=dict(color="#FFFFFF"), orientation="h", yanchor="bottom", y=1.02, x=0),
             margin=dict(l=60, r=20, t=60, b=30),
-            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
+            plot_bgcolor="#0a0a0a", paper_bgcolor="#0a0a0a"
+        )
+        fig.update_xaxes(
+            gridcolor="rgba(255,255,255,0.08)", gridwidth=1,
+            tickfont=dict(color="#9CA3AF", size=10),
+            title_font=dict(color="#E5E7EB", size=11),
+            linecolor="rgba(255,255,255,0.15)"
+        )
+        fig.update_yaxes(
+            gridcolor="rgba(255,255,255,0.08)", gridwidth=1,
+            tickfont=dict(color="#9CA3AF", size=10),
+            title_font=dict(color="#E5E7EB", size=11),
+            linecolor="rgba(255,255,255,0.15)"
         )
         fig.update_yaxes(title_text="km/h", row=1, col=1)
         fig.update_yaxes(title_text="%", row=2, col=1)
@@ -661,7 +670,6 @@ async def cross_year_compare(
             latest_yr = max(all_telemetry.keys())
             local_analyzer.load_session(year=latest_yr, track=track, event_type=event_type)
             fig_map = local_analyzer.plot_track_map(driver, lap_mode="fastest", show=False)
-            fig_map.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
             track_map_json = fig_map.to_json()
 
         valid_times = {}
@@ -842,11 +850,23 @@ async def teams_compare(
 
         fig.update_layout(
             template="plotly_dark", height=800, hovermode="x unified",
-            font=dict(family="JetBrains Mono, monospace", color="#FFFFFF", size=11),
+            font=dict(family="JetBrains Mono, monospace", color="#E5E7EB", size=11),
             hoverlabel=dict(bgcolor="rgba(0,0,0,0.92)", font_size=12, font_color="#FFFFFF", font_family="JetBrains Mono"),
-            legend=dict(bgcolor="rgba(0,0,0,0.5)", bordercolor="rgba(255,255,255,0.1)", font=dict(color="#FFFFFF", size=13), orientation="h", yanchor="bottom", y=1.02, x=0),
+            legend=dict(bgcolor="rgba(10,10,10,0.8)", bordercolor="rgba(255,255,255,0.1)", font=dict(color="#FFFFFF", size=13), orientation="h", yanchor="bottom", y=1.02, x=0),
             margin=dict(l=60, r=20, t=40, b=30),
-            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
+            plot_bgcolor="#0a0a0a", paper_bgcolor="#0a0a0a"
+        )
+        fig.update_xaxes(
+            gridcolor="rgba(255,255,255,0.08)", gridwidth=1,
+            tickfont=dict(color="#9CA3AF", size=10),
+            title_font=dict(color="#E5E7EB", size=11),
+            linecolor="rgba(255,255,255,0.15)"
+        )
+        fig.update_yaxes(
+            gridcolor="rgba(255,255,255,0.08)", gridwidth=1,
+            tickfont=dict(color="#9CA3AF", size=10),
+            title_font=dict(color="#E5E7EB", size=11),
+            linecolor="rgba(255,255,255,0.15)"
         )
         fig.update_yaxes(title_text="km/h", row=1, col=1)
         fig.update_yaxes(title_text="%", row=2, col=1)

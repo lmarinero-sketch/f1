@@ -272,7 +272,9 @@ class F1PerformanceAnalyzer:
             template="plotly_dark",
             height=1000,
             hovermode="x unified",
-            font=dict(family="JetBrains Mono, monospace", color="#FFFFFF", size=11),
+            plot_bgcolor="#0a0a0a",
+            paper_bgcolor="#0a0a0a",
+            font=dict(family="JetBrains Mono, monospace", color="#E5E7EB", size=11),
             hoverlabel=dict(
                 bgcolor="rgba(0, 0, 0, 0.92)",
                 font_size=12,
@@ -281,13 +283,27 @@ class F1PerformanceAnalyzer:
                 bordercolor="rgba(255, 255, 255, 0.15)"
             ),
             legend=dict(
-                bgcolor="rgba(0, 0, 0, 0.5)",
+                bgcolor="rgba(10, 10, 10, 0.8)",
                 bordercolor="rgba(255, 255, 255, 0.1)",
                 font=dict(color="#FFFFFF", size=12),
                 orientation="h",
                 yanchor="bottom", y=1.02, xanchor="left", x=0
             ),
             margin=dict(l=60, r=20, t=40, b=30)
+        )
+
+        # Style all axes with visible gridlines and tick labels
+        fig.update_xaxes(
+            gridcolor="rgba(255,255,255,0.08)", gridwidth=1,
+            tickfont=dict(color="#9CA3AF", size=10),
+            title_font=dict(color="#E5E7EB", size=11),
+            linecolor="rgba(255,255,255,0.15)"
+        )
+        fig.update_yaxes(
+            gridcolor="rgba(255,255,255,0.08)", gridwidth=1,
+            tickfont=dict(color="#9CA3AF", size=10),
+            title_font=dict(color="#E5E7EB", size=11),
+            linecolor="rgba(255,255,255,0.15)"
         )
 
         fig.update_yaxes(title_text="km/h", row=1, col=1)
@@ -359,10 +375,12 @@ class F1PerformanceAnalyzer:
 
         fig.update_layout(
             template="plotly_dark",
+            plot_bgcolor="#0a0a0a",
+            paper_bgcolor="#0a0a0a",
             xaxis=dict(scaleanchor="y", scaleratio=1, showgrid=False, zeroline=False,
                        showticklabels=False, showline=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, showline=False),
-            font=dict(family="JetBrains Mono, monospace", color="#FFFFFF"),
+            font=dict(family="JetBrains Mono, monospace", color="#E5E7EB"),
             margin=dict(l=0, r=40, t=10, b=0),
             hoverlabel=dict(
                 bgcolor="rgba(0, 0, 0, 0.9)", font_color="#FFFFFF",
