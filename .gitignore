@@ -4,3 +4,8 @@ node_modules/
 __pycache__/
 *.pyc
 .agent/
+dist/
+frontend/dist/
+*.egg-info/
+.venv/
+venv/
