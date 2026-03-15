@@ -27,6 +27,9 @@ const SESSION_COLORS = {
     'Sprint Qualifying': '#8B5CF6', 'Sprint Shootout': '#8B5CF6',
 };
 
+// Eventos suspendidos
+const SUSPENDED_EVENTS = ['Bahrain Grand Prix', 'Saudi Arabian Grand Prix'];
+
 function getFlag(country) {
     for (const [key, flag] of Object.entries(COUNTRY_FLAGS)) {
         if (country.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(country.toLowerCase())) {
@@ -226,8 +229,25 @@ export default function SchedulePage() {
                         <span className="text-[10px] font-mono text-text-muted font-normal">({upcomingEvents.length})</span>
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                        {upcomingEvents.map(event => (
-                            <div key={event.round_number} className="glass-card !p-4 group hover:shadow-md transition-all">
+                        {upcomingEvents.map(event => {
+                            const isSuspended = SUSPENDED_EVENTS.some(s => event.event_name.includes(s) || s.includes(event.event_name));
+                            return (
+                            <div key={event.round_number}
+                                className={`glass-card !p-4 group transition-all relative overflow-hidden ${isSuspended ? 'opacity-60 grayscale' : 'hover:shadow-md'}`}>
+                                {isSuspended && (
+                                    <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+                                        <div className="absolute w-[150%] py-2 text-center transform -rotate-[30deg]"
+                                            style={{
+                                                background: 'rgba(229, 57, 53, 0.85)',
+                                                boxShadow: '0 2px 12px rgba(229,57,53,0.4)',
+                                            }}>
+                                            <span className="text-white text-sm font-black tracking-[0.2em] uppercase"
+                                                style={{ fontFamily: 'Outfit, sans-serif', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
+                                                SUSPENDIDO
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="flex items-center justify-between mb-2">
                                     <span className="text-2xl">{getFlag(event.country)}</span>
                                     <span className="text-[10px] font-mono text-text-muted px-2 py-0.5 rounded-full bg-[#F5F5F5]">
@@ -252,7 +272,7 @@ export default function SchedulePage() {
                                     ))}
                                 </div>
                             </div>
-                        ))}
+                        )})}
                     </div>
                 </div>
             )}
@@ -265,17 +285,37 @@ export default function SchedulePage() {
                         <span className="text-[10px] font-mono text-text-muted font-normal">({pastEvents.length})</span>
                     </h2>
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
-                        {pastEvents.map(event => (
-                            <div key={event.round_number} className="glass-card !p-3 opacity-60 hover:opacity-100 transition-opacity">
+                        {pastEvents.map(event => {
+                            const isSuspended = SUSPENDED_EVENTS.some(s => event.event_name.includes(s) || s.includes(event.event_name));
+                            return (
+                            <div key={event.round_number}
+                                className={`glass-card !p-3 transition-opacity relative overflow-hidden ${isSuspended ? 'opacity-50 grayscale' : 'opacity-60 hover:opacity-100'}`}>
+                                {isSuspended && (
+                                    <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+                                        <div className="absolute w-[150%] py-1 text-center transform -rotate-[30deg]"
+                                            style={{
+                                                background: 'rgba(229, 57, 53, 0.85)',
+                                                boxShadow: '0 2px 12px rgba(229,57,53,0.4)',
+                                            }}>
+                                            <span className="text-white text-[9px] font-black tracking-[0.15em] uppercase"
+                                                style={{ fontFamily: 'Outfit, sans-serif', textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>
+                                                SUSPENDIDO
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="flex items-center gap-2 mb-1">
                                     <span className="text-lg">{getFlag(event.country)}</span>
                                     <span className="text-[9px] font-mono text-text-muted">R{event.round_number}</span>
                                 </div>
                                 <div className="text-xs font-bold text-text-heading truncate">{event.event_name}</div>
                                 <div className="text-[10px] text-text-muted">{event.event_date}</div>
-                                <span className="text-[8px] text-[#E53935] font-bold uppercase mt-1 inline-block">Finalizado</span>
+                                {isSuspended
+                                    ? <span className="text-[8px] text-[#E53935] font-bold uppercase mt-1 inline-block">Suspendido</span>
+                                    : <span className="text-[8px] text-[#E53935] font-bold uppercase mt-1 inline-block">Finalizado</span>
+                                }
                             </div>
-                        ))}
+                        )})}
                     </div>
                 </div>
             )}
