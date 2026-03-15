@@ -33,16 +33,6 @@ export default function SeasonTrends() {
         setLoading(true); setError(null); setResult(null); setDataSource(null);
         const params = `year=${year}&drivers=${drivers.join(',')}&event_type=${eventType}`;
         try {
-            const fastRes = await fetch(`${API_URL}/api/season-trends-fast?${params}`);
-            if (fastRes.ok) {
-                const data = await fastRes.json();
-                setResult(data);
-                setDataSource('database');
-                setLoading(false);
-                return;
-            }
-        } catch (e) { }
-        try {
             setDataSource('loading');
             const res = await fetch(`${API_URL}/api/season-trends?${params}`);
             if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "Error"); }
@@ -137,7 +127,7 @@ export default function SeasonTrends() {
                     <div className="flex flex-col gap-1">
                         <label className="text-[9px] uppercase tracking-widest text-text-heading font-semibold">Year</label>
                         <div className="flex gap-1">
-                            {[2022, 2023, 2024, 2025].map(y => (
+                            {[2022, 2023, 2024, 2025, 2026].map(y => (
                                 <button key={y} onClick={() => setYear(y)}
                                     className={`px-3 py-1 rounded-lg font-mono text-xs font-bold border transition-all
                     ${year === y ? 'bg-accent-primary text-white border-accent-primary' : 'text-text-body border-border-light hover:border-accent-primary bg-white'}`}>
