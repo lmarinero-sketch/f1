@@ -197,16 +197,31 @@ def analyze_telemetry(
         try:
             analyzer.load_session(year=year, track=track, event_type=event_type)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to load session: {e}")
+            err_msg = str(e).lower()
+            if "not been loaded" in err_msg or "no data" in err_msg or "no session" in err_msg:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Los datos de esta sesión no están disponibles todavía. Es posible que el evento aún no haya ocurrido."
+                )
+            raise HTTPException(status_code=400, detail=f"No se pudo cargar la sesión: {e}")
 
         driver_list = [d.strip().upper() for d in drivers.split(',') if d.strip()]
         if len(driver_list) < 1:
-            raise HTTPException(status_code=400, detail="At least 1 driver required")
+            raise HTTPException(status_code=400, detail="Se requiere al menos 1 piloto")
 
-        comp_data = analyzer.compare_drivers(
-            driver_list, lap_mode=lap_mode,
-            lap_number=lap_number, lap_start=lap_start, lap_end=lap_end
-        )
+        try:
+            comp_data = analyzer.compare_drivers(
+                driver_list, lap_mode=lap_mode,
+                lap_number=lap_number, lap_start=lap_start, lap_end=lap_end
+            )
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "not been loaded" in err_msg or "no lap" in err_msg or "no data" in err_msg:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"No hay datos de telemetría disponibles para esta sesión. Verificá que el evento ya haya ocurrido y que la sesión ({event_type}) exista."
+                )
+            raise
 
         fig_telemetry = analyzer.plot_telemetry_multi(comp_data, show=False)
         bg_t = dict(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
@@ -254,6 +269,12 @@ def analyze_telemetry(
     except HTTPException:
         raise
     except Exception as e:
+        err_msg = str(e).lower()
+        if "not been loaded" in err_msg or "no data" in err_msg:
+            raise HTTPException(
+                status_code=400,
+                detail="Los datos de esta sesión no están disponibles. Verificá que el evento ya haya ocurrido."
+            )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -285,25 +306,92 @@ async def get_race_results(
         }
 
         # 1. Classification
+        import pandas as pd
+
+        # Helper to safely extract numeric values from results
+        def _safe_int(val, default=0):
+            """Safely convert a value to int, handling NaN/NaT/None."""
+            if val is None:
+                return default
+            try:
+                if pd.isna(val):
+                    return default
+            except (TypeError, ValueError):
+                pass
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                return default
+
+        def _safe_float(val, default=0.0):
+            """Safely convert a value to float, handling NaN/NaT/None."""
+            if val is None:
+                return default
+            try:
+                if pd.isna(val):
+                    return default
+            except (TypeError, ValueError):
+                pass
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return default
+
         classification = []
         if results_df is not None and len(results_df) > 0:
+            # Pre-compute driver laps count from laps_df as fallback
+            driver_lap_counts = {}
+            try:
+                for drv in laps_df['Driver'].unique():
+                    drv_laps = laps_df[laps_df['Driver'] == drv]
+                    driver_lap_counts[drv] = int(drv_laps['LapNumber'].max()) if len(drv_laps) > 0 else 0
+            except Exception:
+                pass
+
             for _, row in results_df.iterrows():
                 try:
-                    pos = row.get('Position', None)
-                    pos = int(pos) if pos and str(pos) != 'nan' else None
-                    status = str(row.get('Status', ''))
                     abbr = str(row.get('Abbreviation', ''))
                     full_name = str(row.get('FullName', abbr))
                     team = str(row.get('TeamName', ''))
                     number = str(row.get('DriverNumber', ''))
-                    points = float(row.get('Points', 0)) if str(row.get('Points', '')) != 'nan' else 0
-                    grid_pos = int(row.get('GridPosition', 0)) if str(row.get('GridPosition', '')) != 'nan' else 0
+
+                    # Position - try multiple approaches
+                    pos = None
+                    pos_raw = row.get('Position', None)
+                    pos_int = _safe_int(pos_raw, default=0)
+                    if pos_int > 0:
+                        pos = pos_int
+                    elif 'ClassifiedPosition' in row.index:
+                        cp = row.get('ClassifiedPosition', None)
+                        cp_int = _safe_int(cp, default=0)
+                        if cp_int > 0:
+                            pos = cp_int
+
+                    # Status
+                    status_raw = row.get('Status', None)
+                    status = str(status_raw) if status_raw is not None and not pd.isna(status_raw) else ''
+                    if status == 'nan':
+                        status = ''
+
+                    # Points & Grid
+                    points = _safe_float(row.get('Points', 0))
+                    grid_pos = _safe_int(row.get('GridPosition', 0))
+
+                    # Number of laps - try results first, then fallback to laps_df
+                    num_laps = _safe_int(row.get('NumberOfLaps', 0))
+                    if num_laps == 0:
+                        num_laps = driver_lap_counts.get(abbr, 0)
 
                     # Time
                     time_val = row.get('Time', None)
                     time_str = ''
-                    gap_str = ''
-                    if time_val and str(time_val) != 'NaT' and str(time_val) != 'nan':
+                    is_time_valid = False
+                    try:
+                        is_time_valid = time_val is not None and not pd.isna(time_val)
+                    except (TypeError, ValueError):
+                        is_time_valid = time_val is not None
+
+                    if is_time_valid:
                         try:
                             ts = time_val.total_seconds()
                             if pos == 1 or pos is None:
@@ -312,43 +400,70 @@ async def get_race_results(
                                 secs = ts % 60
                                 time_str = f"{hrs}:{mins:02d}'{secs:06.3f}"
                             else:
-                                gap_str = f"+{ts:.3f}"
-                                time_str = gap_str
-                        except:
+                                time_str = f"+{ts:.3f}"
+                        except Exception:
                             time_str = str(time_val)
-                    elif 'Lap' in status or 'DNF' in status.upper() or 'Retired' in status:
+                    elif status and ('Lap' in status or 'DNF' in status.upper() or 'Retired' in status):
                         time_str = status
+
+                    # Determine final position display
+                    is_dnf = False
+                    if status:
+                        is_dnf = any(x in status.upper() for x in ['DNF', 'RETIRED', 'ACCIDENT', 'COLLISION', 'MECHANICAL', 'ENGINE', 'GEARBOX', 'HYDRAUL', 'POWER'])
+                    if not pos and not is_dnf and num_laps > 0 and num_laps >= total_laps:
+                        # Driver completed all laps but Position is missing - mark as finished
+                        is_dnf = False
 
                     # Fastest lap
                     fl_time_str = ''
                     try:
                         drv_laps = laps_df[laps_df['Driver'] == abbr]
                         if len(drv_laps) > 0:
-                            fastest = drv_laps.loc[drv_laps['LapTime'].idxmin()]
-                            fl_ts = fastest['LapTime'].total_seconds()
-                            fl_m = int(fl_ts // 60)
-                            fl_s = fl_ts % 60
-                            fl_time_str = f"{fl_m}:{fl_s:06.3f}"
-                    except:
+                            valid_laps = drv_laps.dropna(subset=['LapTime'])
+                            if len(valid_laps) > 0:
+                                fastest = valid_laps.loc[valid_laps['LapTime'].idxmin()]
+                                fl_ts = fastest['LapTime'].total_seconds()
+                                fl_m = int(fl_ts // 60)
+                                fl_s = fl_ts % 60
+                                fl_time_str = f"{fl_m}:{fl_s:06.3f}"
+                    except Exception:
                         pass
 
+                    # Final position: use pos if available, otherwise 'DNF' only if truly DNF
+                    position_display = pos if pos else ('DNF' if is_dnf or num_laps == 0 else None)
+
                     classification.append({
-                        'position': pos if pos else 'DNF',
+                        'position': position_display,
                         'abbreviation': abbr,
                         'full_name': full_name,
                         'team': team,
                         'team_color': TCOLORS.get(team, '#FFFFFF'),
                         'number': number,
-                        'laps': int(row.get('NumberOfLaps', 0)) if str(row.get('NumberOfLaps', '')) != 'nan' else 0,
+                        'laps': num_laps,
                         'time': time_str,
                         'status': status,
                         'points': int(points),
                         'grid_position': grid_pos,
-                        'positions_gained': grid_pos - pos if pos and grid_pos else 0,
+                        'positions_gained': (grid_pos - pos) if pos and grid_pos else 0,
                         'fastest_lap': fl_time_str,
                     })
                 except Exception as ex:
                     print(f"Result row error: {ex}")
+
+            # If all positions are None (no official classification yet), infer from fastest lap times
+            has_positions = any(c['position'] is not None and c['position'] != 'DNF' for c in classification)
+            if not has_positions and len(classification) > 0:
+                # Sort by laps completed (desc) then fastest lap time (asc)
+                def _sort_key(c):
+                    laps = c.get('laps', 0)
+                    fl = c.get('fastest_lap', '')
+                    return (-laps, fl if fl else 'z')
+                classification.sort(key=_sort_key)
+                for i, c in enumerate(classification):
+                    if c['laps'] > 0:
+                        c['position'] = i + 1
+                    else:
+                        c['position'] = 'DNF'
 
         # 2. Fastest Laps ranking
         fastest_laps = []
